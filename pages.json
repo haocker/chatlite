@@ -1,0 +1,19 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "AI Chat Assistant",
+        "navigationBarBackgroundColor": "#4a5568",
+        "navigationBarTextStyle": "white"
+      }
+    }
+  ],
+  "globalStyle": {
+	"navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "AI Chat Client",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  }
+}

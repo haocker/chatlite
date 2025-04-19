@@ -1,0 +1,21 @@
+{
+  "name": "ai-chat-client",
+  "version": "1.0.0",
+  "description": "AI Chat Client built with UniApp",
+  "main": "main.js",
+  "scripts": {
+    "dev:h5": "uni -p h5",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:h5": "uni build -p h5",
+    "build:mp-weixin": "uni build -p mp-weixin"
+  },
+  "dependencies": {
+    "@dcloudio/uni-ui": "^1.4.0",
+    "marked": "^4.3.0"
+  },
+  "devDependencies": {
+    "@dcloudio/uni-cli-shared": "^2.0.0-36920230426001",
+    "@dcloudio/uni-h5": "^2.0.0-36920230426001",
+    "@dcloudio/uni-mp-weixin": "^2.0.0-36920230426001"
+  }
+}
