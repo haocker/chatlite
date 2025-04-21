@@ -6,12 +6,29 @@
 	          </view>
     <view class="chat-header">
 		 <uni-icons type="gear" size="24" color="white" @click="openSettings"></uni-icons>
-      <view class="header-title">AI Chat Assistant</view>
+      <view class="header-title">ChatLite</view>
      
     </view>
     <scroll-view class="chat-messages" ref="chatMessages" scroll-y="true" :scroll-top="scrollTop" @scroll="onScroll">
-      <view class="message" v-for="(message, index) in messages" :key="index" :class="message.isUser ? 'user-message' : 'ai-message'">
-        <view class="message-content" v-html="message.isUser ? message.content : markedContent(message.content)"></view>
+      <view class="message" 
+        v-for="(message, index) in messages" 
+        :key="index" 
+        :class="[
+          message.isUser ? 'user-message' : 'ai-message',
+          {'message--clickable': message.isUser}
+        ]"
+        @click="message.isUser && fillMessage(message.content)"
+      >
+        <view class="message-content" 
+          v-html="message.isUser ? message.content : markedContent(message.content)"
+        ></view>
+        <view 
+          v-if="!message.isUser && !message.isThinking && message.isComplete" 
+          class="copy-button" 
+          @click.stop="copyMessage(message.content)"
+        >
+          复制
+        </view>
         <view v-if="message.isThinking" class="thinking-animation">
           <view class="dot"></view>
           <view class="dot"></view>
@@ -30,9 +47,36 @@
         <view class="uni-input">{{ modelOptions.find(opt => opt.value === currentModel)?.text || '请选择模型' }}</view>
       </picker>
     </view>
-    <view class="chat-input">
-      <input type="text" v-model="userInput" placeholder="输入消息..." @confirm="sendMessage" />
-      <button :disabled="isSending" @click="sendMessage">发送</button>
+    <view class="chat-input" :class="{'chat-input--fullscreen': isFullscreen}">
+      <view class="textarea-tools">
+        <uni-icons 
+          :type="isFullscreen ? 'bottom' : 'top'" 
+          size="20" 
+          color="#666"
+          @click="toggleFullscreen"
+        ></uni-icons>
+      </view>
+      <view class="input-container">
+        <view class="textarea-container">
+          <textarea
+            v-model="userInput"
+            placeholder="输入消息..."
+            :auto-height="true"
+            :show-confirm-bar="false"
+            :cursor-spacing="20"
+            class="chat-textarea"
+            :style="{ 
+              maxHeight: isFullscreen ? 'calc(100vh - 180px)' : '84px',
+              minHeight: '36px',
+              height: 'auto'
+            }"
+            @confirm="sendMessage"
+          />
+        </view>
+        <button :disabled="isSending" @click="sendMessage" class="send-button">
+          <uni-icons type="paperplane" size="20" color="white"></uni-icons>
+        </button>
+      </view>
     </view>
     
     <!-- Settings Drawer -->
@@ -150,12 +194,30 @@ export default {
         { value: 'chat', text: '聊天' },
         { value: 'drawing', text: '画图' }
       ],
-      addModelOptions: []
+      addModelOptions: [],
+      isFullscreen: false,
+      previousHeight: null
     };
   },
   computed: {
     modelOptions() {
       return this.models.map(model => ({ value: model.id, text: model.name }));
+    }
+  },
+  watch: {
+    // 监听每条消息的完成状态
+    'messages': {
+      deep: true,
+      handler(newMessages) {
+        // 找到最后一条消息
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage && !lastMessage.isUser && !lastMessage.isThinking && lastMessage.isComplete) {
+          // 消息完成后自动滚动
+          this.$nextTick(() => {
+            this.scrollToBottom();
+          });
+        }
+      }
     }
   },
   onLoad() {
@@ -317,7 +379,7 @@ export default {
       const apiKey = model.apiKey;
       const messages = this.getChatContext(userMessage);
       
-      this.messages.push({ content: '', isUser: false, isThinking: true });
+      this.messages.push({ content: '', isUser: false, isThinking: true, isComplete: false });
       const aiMessageIndex = this.messages.length - 1;
       this.scrollToBottom();
       
@@ -428,6 +490,7 @@ export default {
                     }, 0);
                   }
                 }
+                this.messages[aiMessageIndex].isComplete = true; // 标记消息已完成
                 return;
               }
               const text = decoder.decode(value, { stream: true });
@@ -454,6 +517,7 @@ export default {
             }).catch(error => {
               console.error('Stream reading error:', error);
               this.messages[aiMessageIndex].content = `流式读取错误: ${error.message}`;
+              this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
               this.scrollToBottom();
             });
           };
@@ -461,6 +525,7 @@ export default {
         }).catch(error => {
           this.messages[aiMessageIndex].isThinking = false;
           this.messages[aiMessageIndex].content = `API请求失败: ${error.message}`;
+          this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
           setTimeout(() => {
             this.scrollTop = 99999;
           }, 100);
@@ -468,6 +533,7 @@ export default {
         // #endif
       } catch (error) {
         this.messages[aiMessageIndex].isThinking = false;
+        this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
         throw error;
       }
     },
@@ -603,8 +669,42 @@ export default {
 			// 设置状态栏高度（H5顶部无状态栏小程序有状态栏需要撑起高度）
 			statusBarObj.statusBarHeight = phoneInfo.statusBarHeight;
 			return statusBarObj;
-		}
-
+		},
+    copyMessage(content) {
+      uni.setClipboardData({
+        data: content,
+        success: () => {
+          uni.showToast({ title: '复制成功', icon: 'success' });
+          //this.scrollToBottom(); // 滚动到底部
+        },
+        fail: () => {
+          uni.showToast({ title: '复制失败', icon: 'none' });
+        }
+      });
+    },
+    fillMessage(content) {
+      uni.showModal({
+        title: '提示',
+        content: '是否将此消息填充到输入框？',
+        success: (res) => {
+          if (res.confirm) {
+            this.userInput = content;
+          }
+        }
+      });
+    },
+    toggleFullscreen() {
+      if (this.isFullscreen) {
+        // 切换回正常模式时保持当前输入框内容的高度
+        const query = uni.createSelectorQuery().in(this);
+        query.select('.chat-textarea').boundingClientRect(data => {
+          if (data) {
+            this.previousHeight = data.height + 'px';
+          }
+        }).exec();
+      }
+      this.isFullscreen = !this.isFullscreen;
+    }
   }
 };
 </script>
@@ -668,6 +768,7 @@ export default {
   background-color: #e2e8f0;
   color: #1a202c;
   border-bottom-left-radius: 5px;
+  position: relative; /* 为了定位复制按钮 */
 }
 
 .message-content {
@@ -681,39 +782,132 @@ export default {
 
 .chat-input {
   display: flex;
-  padding: 15px;
+  padding: 8px 12px;
   background-color: white;
   border-top: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 100;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.chat-input input {
+.input-container {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.textarea-container {
   flex: 1;
-  padding: 12px 15px;
-  border: 1px solid #e2e8f0;
-  border-radius: 24px;
-  font-size: 1rem;
-  outline: none;
+  position: relative;
 }
 
-.chat-input button {
-  margin-left: 10px;
-  padding: 12px 20px;
+.chat-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+  resize: none;
+}
+
+.chat-input--fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: white;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.chat-input--fullscreen .input-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.chat-input--fullscreen .textarea-container {
+  height: 100%;
+  margin-right: 8px;
+}
+
+.chat-input--fullscreen .chat-textarea {
+  height: 100% !important;
+  border-color: transparent;
+  background-color: #f9fafb;
+}
+
+.send-button {
+  height: 36px;
+  width: 36px;
+  min-width: 36px;
+  flex: none;
+  margin: 0 0 1px 0;
+  padding: 0;
   background-color: #3b82f6;
   color: white;
   border: none;
-  border-radius: 24px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  border-radius: 50%;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
 }
 
-.chat-input button:hover {
+.send-button:hover {
   background-color: #2563eb;
+  transform: scale(1.05);
 }
 
-.chat-input button:disabled {
+.send-button:active {
+  transform: scale(0.95);
+}
+
+.send-button:disabled {
   background-color: #93c5fd;
   cursor: not-allowed;
+  transform: none;
+}  
+
+.textarea-tools {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.textarea-tools uni-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
+  background-color: #f3f4f6;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.textarea-tools uni-icons:active {
+  background-color: #e5e7eb;
 }
 
 /* Markdown styling */
@@ -913,4 +1107,28 @@ export default {
         background-color: #4a5568;
         width: 100%;
     }
+.copy-button {
+  margin-top: 5px;
+  font-size: 0.8rem;
+  color: #3b82f6;
+  cursor: pointer;
+  text-align: left;
+}
+
+.copy-button:hover {
+  text-decoration: underline;
+}
+
+.message--clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.message--clickable:hover {
+  opacity: 0.9;
+}
+
+.message--clickable:active {
+  transform: scale(0.98);
+}
 </style>
