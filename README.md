@@ -68,7 +68,7 @@
 4. 推送到分支（`git push origin feature/AmazingFeature`）。
 5. 提交 Pull Request。
 ## 许可证
-本项目采用 [MIT 许可证](LICENSE) 开源，欢迎自由使用、修改和分发。
+本项目采用 [Apache License 2.0](LICENSE) 开源，欢迎自由使用、修改和分发。
 ## 联系方式
 如果您有任何问题或建议，欢迎通过以下方式联系我：
 - **GitHub Issues**：[提交问题](https://github.com/haocker/chatlite/issues)
@@ -78,3 +78,4 @@
 ## 致谢
 - 感谢 [UniApp](https://uniapp.dcloud.io/) 提供的跨平台开发框架。
 - 感谢开源社区的支持和贡献。
+- 
