@@ -161,7 +161,13 @@ export default {
   onLoad() {
 	  let statusBarObj = this.getPhoneInfo()
 	  this.statusBarHeight = statusBarObj.statusBarHeight
-
+    // #ifdef H5
+	if(typeof window.acjsapi != "undefined"){
+		acjsapi.getStatusBarHeight().then(r=>{
+			this.statusBarHeight = r;
+		})
+	}
+	// #endif
     marked.setOptions({
       breaks: true,
       gfm: true
