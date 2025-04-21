@@ -63,17 +63,24 @@
             placeholder="输入消息..."
             :auto-height="true"
             :show-confirm-bar="false"
+            :maxlength="-1"
             :cursor-spacing="20"
             class="chat-textarea"
             :style="{ 
               maxHeight: isFullscreen ? 'calc(100vh - 180px)' : '84px',
               minHeight: '36px',
-              height: 'auto'
+              height: 'auto',
+              width: isFullscreen ? '100%' : '100%'
             }"
             @confirm="sendMessage"
           />
         </view>
-        <button :disabled="isSending" @click="sendMessage" class="send-button">
+        <button 
+          v-if="!isFullscreen"
+          :disabled="isSending" 
+          @click="sendMessage" 
+          class="send-button"
+        >
           <uni-icons type="paperplane" size="20" color="white"></uni-icons>
         </button>
       </view>
@@ -843,13 +850,15 @@ export default {
 
 .chat-input--fullscreen .textarea-container {
   height: 100%;
-  margin-right: 8px;
+  width: 100%;
 }
 
 .chat-input--fullscreen .chat-textarea {
   height: 100% !important;
   border-color: transparent;
   background-color: #f9fafb;
+  padding: 12px;
+  width: 100%;
 }
 
 .send-button {
