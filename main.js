@@ -1,7 +1,13 @@
 
+import './utils/convertjs.js'
 // #ifndef VUE3
 import Vue from 'vue'
 import App from './App'
+
+// 确保 TextDecoder 被引用
+if (typeof TextDecoder !== 'undefined') {
+  console.log('TextDecoder is available');
+}
 
 
 Vue.config.productionTip = false

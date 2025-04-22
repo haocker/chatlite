@@ -5,9 +5,11 @@
 	              <!-- 这里是状态栏 -->
 	          </view>
     <view class="chat-header">
-		 <uni-icons type="gear" size="24" color="white" @click="openSettings"></uni-icons>
+      <view class="header-icons">
+        <uni-icons type="bars" size="24" color="white" @click="openConversations"></uni-icons>
+        <uni-icons type="gear" size="24" color="white" @click="openSettings"></uni-icons>
+      </view>
       <view class="header-title">ChatLite</view>
-     
     </view>
     <scroll-view class="chat-messages" ref="chatMessages" scroll-y="true" :scroll-top="scrollTop" @scroll="onScroll">
       <view class="message" 
@@ -48,7 +50,10 @@
       </picker>
     </view>
     <view class="chat-input" :class="{'chat-input--fullscreen': isFullscreen}">
-      <view class="textarea-tools">
+      <view v-if="isFullscreen" :style="{height:statusBarHeight+'px'}">
+                  <!-- 这里是状态栏 -->
+              </view>
+	  <view class="textarea-tools">
         <uni-icons 
           :type="isFullscreen ? 'bottom' : 'top'" 
           size="20" 
@@ -118,6 +123,40 @@
             </uni-list>
           </view>
           <!-- Removed Save Settings button as per request -->
+        </view>
+      </view>
+    </uni-drawer>
+    
+    <!-- Conversations Drawer -->
+    <uni-drawer ref="conversationsDrawer" mode="left" :width="300" :mask-click="true">
+      <view class="drawer-content">
+        <view :style="{height:statusBarHeight+'px'}">
+          <!-- 这里是状态栏 -->
+        </view>
+        <view class="modal-header">
+          <view class="modal-title">会话列表</view>
+          <view class="header-actions">
+            <uni-icons type="plus" size="24" color="#4a5568" @click="addNewConversation" style="margin-right: 10px;"></uni-icons>
+            <uni-icons type="close" size="24" color="#4a5568" @click="closeConversations"></uni-icons>
+          </view>
+        </view>
+        <view class="settings-form">
+          <view class="form-group">
+            <uni-list>
+              <uni-list-item v-for="(conv, index) in conversations" :key="index" :show-arrow="false">
+                <template v-slot:header>
+                  <view class="conversation-item" @click="selectConversation(conv.id)">
+                    <text :style="{ color: conv.id === currentConversationId ? '#3b82f6' : '#000' }">{{ conv.name }}</text>
+                  </view>
+                </template>
+                <template v-slot:footer>
+                  <view class="button-sp-area">
+                    <uni-icons type="trash" size="20" color="#ef4444" @click="removeConversation(conv.id)"></uni-icons>
+                  </view>
+                </template>
+              </uni-list-item>
+            </uni-list>
+          </view>
         </view>
       </view>
     </uni-drawer>
@@ -203,7 +242,9 @@ export default {
       ],
       addModelOptions: [],
       isFullscreen: false,
-      previousHeight: null
+      previousHeight: null,
+      conversations: [],
+      currentConversationId: null
     };
   },
   computed: {
@@ -251,6 +292,89 @@ export default {
       const savedModels = uni.getStorageSync('aiChatModels');
       this.models = savedModels ? JSON.parse(savedModels) : this.defaultModels;
       this.currentModel = uni.getStorageSync('aiChatCurrentModel') || this.models[0].id;
+      this.loadConversations();
+    },
+    loadConversations() {
+      const savedConversations = uni.getStorageSync('aiChatConversations');
+      this.conversations = savedConversations ? JSON.parse(savedConversations) : [];
+      if (this.conversations.length === 0) {
+        this.addNewConversation();
+      }
+      this.currentConversationId = uni.getStorageSync('aiChatCurrentConversation') || this.conversations[0]?.id;
+      this.loadMessages();
+    },
+    loadMessages() {
+      if (this.currentConversationId) {
+        const savedMessages = uni.getStorageSync(`aiChatMessages_${this.currentConversationId}`);
+        this.messages = savedMessages ? JSON.parse(savedMessages) : [
+          {
+            content: '你好！我是AI助手，有什么我可以帮助你的吗？',
+            isUser: false
+          }
+        ];
+      }
+    },
+    saveConversations() {
+      uni.setStorageSync('aiChatConversations', JSON.stringify(this.conversations));
+    },
+    saveMessages() {
+      if (this.currentConversationId) {
+        uni.setStorageSync(`aiChatMessages_${this.currentConversationId}`, JSON.stringify(this.messages));
+      }
+    },
+    openConversations() {
+      this.$refs.conversationsDrawer.open();
+    },
+    closeConversations() {
+      this.$refs.conversationsDrawer.close();
+    },
+    addNewConversation() {
+      uni.showModal({
+        title: '新建会话',
+        content: '',
+        editable: true,
+        placeholderText: '会话名称',
+        success: (res) => {
+          if (res.confirm && res.content) {
+            const newConvId = this.generateUniqueId();
+            const newConv = {
+              id: newConvId,
+              name: res.content,
+              createdAt: new Date().toISOString()
+            };
+            this.conversations.push(newConv);
+            this.saveConversations(); // 确保在选择新会话前保存
+            this.selectConversation(newConvId);
+          }
+        }
+      });
+    },
+    selectConversation(convId) {
+      this.currentConversationId = convId;
+      uni.setStorageSync('aiChatCurrentConversation', convId);
+      this.loadMessages();
+      this.closeConversations();
+    },
+    removeConversation(convId) {
+      if (this.conversations.length <= 1) {
+        uni.showToast({ title: '至少保留一个会话', icon: 'none' });
+        return;
+      }
+      uni.showModal({
+        title: '确认',
+        content: '确定要删除此会话吗？',
+        success: (res) => {
+          if (res.confirm) {
+            this.conversations = this.conversations.filter(c => c.id !== convId);
+            if (this.currentConversationId === convId) {
+              this.currentConversationId = this.conversations[0].id;
+              uni.setStorageSync('aiChatCurrentConversation', this.currentConversationId);
+              this.loadMessages();
+            }
+            this.saveConversations();
+          }
+        }
+      });
     },
     markedContent(content) {
 		let mdstr = marked.parse(content);
@@ -351,6 +475,7 @@ export default {
       this.messages.push({ content: message, isUser: true });
       this.userInput = '';
       this.isSending = true;
+      this.saveMessages();
       
       // Ensure scrolling to bottom after sending user message
       setTimeout(() => {
@@ -362,6 +487,7 @@ export default {
       } catch (error) {
         console.error('Error:', error);
         this.messages.push({ content: '抱歉，发生了错误。请检查API密钥和网络连接后再试。', isUser: false });
+        this.saveMessages();
       } finally {
         this.isSending = false;
         this.scrollToBottom();
@@ -378,6 +504,7 @@ export default {
         }
       } catch (error) {
         this.messages.push({ content: `错误: ${error.message}`, isUser: false });
+        this.saveMessages();
         this.scrollToBottom();
       }
     },
@@ -417,6 +544,7 @@ export default {
             this.messages[aiMessageIndex].isThinking = false;
             if (res.data && res.data.choices && res.data.choices[0].message && res.data.choices[0].message.content) {
               this.messages[aiMessageIndex].content = res.data.choices[0].message.content;
+              this.saveMessages();
               this.scrollToBottom();
             }
           },
@@ -424,6 +552,7 @@ export default {
             // 处理错误情况
             this.messages[aiMessageIndex].isThinking = false;
             this.messages[aiMessageIndex].content = `API请求失败: ${err.errMsg}`;
+            this.saveMessages();
             this.scrollToBottom();
           }
         });
@@ -453,6 +582,7 @@ export default {
                 }
                 this.messages[aiMessageIndex].content += parsedData.content;
                 this.messages[aiMessageIndex].isThinking = false;
+                this.saveMessages();
                 // Ensure scrolling to bottom after each content update
                 setTimeout(() => {
                   this.scrollToBottom();
@@ -492,6 +622,7 @@ export default {
                   if (parsedData && parsedData.content) {
                     content += parsedData.content;
                     this.messages[aiMessageIndex].content = content;
+                    this.saveMessages();
                     setTimeout(() => {
                       this.scrollToBottom();
                     }, 0);
@@ -514,6 +645,7 @@ export default {
                   if (parsedData && parsedData.content) {
                     content += parsedData.content;
                     this.messages[aiMessageIndex].content = content;
+                    this.saveMessages();
                     setTimeout(() => {
                       this.scrollToBottom();
                     }, 0);
@@ -525,6 +657,7 @@ export default {
               console.error('Stream reading error:', error);
               this.messages[aiMessageIndex].content = `流式读取错误: ${error.message}`;
               this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
+              this.saveMessages();
               this.scrollToBottom();
             });
           };
@@ -533,6 +666,7 @@ export default {
           this.messages[aiMessageIndex].isThinking = false;
           this.messages[aiMessageIndex].content = `API请求失败: ${error.message}`;
           this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
+          this.saveMessages();
           setTimeout(() => {
             this.scrollTop = 99999;
           }, 100);
@@ -578,14 +712,17 @@ export default {
             content += `![${revisedPrompt}](data:image/png;base64,${imageUrl})\n\n`;
           });
           this.messages[aiMessageIndex].content = content;
+          this.saveMessages();
           this.scrollToBottom();
         } else {
           this.messages[aiMessageIndex].content = `API请求失败，状态码: ${response.statusCode}, 错误信息: ${response.data.error.message}`;
+          this.saveMessages();
           this.scrollToBottom();
         }
       } catch (error) {
         this.messages[aiMessageIndex].isThinking = false;
         this.messages[aiMessageIndex].content = `错误: ${error.message}`;
+        this.saveMessages();
         this.scrollToBottom();
         throw error;
       }
@@ -622,6 +759,7 @@ export default {
         if (index < content.length) {
           currentText += content[index];
           this.messages[aiMessageIndex].content = currentText;
+          this.saveMessages();
           this.scrollToBottom();
           index++;
           setTimeout(stream, streamingDelay);
@@ -733,13 +871,22 @@ export default {
   font-size: 1.2rem;
   font-weight: bold;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  position: relative;
 }
 
 .header-title {
   flex: 1;
   text-align: center;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.header-icons {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
 .chat-messages {
@@ -834,7 +981,7 @@ export default {
   width: 100vw;
   height: 100vh;
   background: white;
-  padding: 20px;
+  padding:0 20px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1093,6 +1240,17 @@ export default {
   cursor: pointer;
   transition: background-color 0.2s;
   margin-top: 10px;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  width: 100%;
+}
+
+.conversation-item text {
+  flex: 1;
 }
 
 .save-button:hover {
