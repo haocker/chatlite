@@ -298,7 +298,15 @@ export default {
       const savedConversations = uni.getStorageSync('aiChatConversations');
       this.conversations = savedConversations ? JSON.parse(savedConversations) : [];
       if (this.conversations.length === 0) {
-        this.addNewConversation();
+        // 自动创建一个名为“默认会话”的会话
+        const newConvId = this.generateUniqueId();
+        const newConv = {
+          id: newConvId,
+          name: '默认会话',
+          createdAt: new Date().toISOString()
+        };
+        this.conversations.push(newConv);
+        this.saveConversations();
       }
       this.currentConversationId = uni.getStorageSync('aiChatCurrentConversation') || this.conversations[0]?.id;
       this.loadMessages();
@@ -544,6 +552,7 @@ export default {
             this.messages[aiMessageIndex].isThinking = false;
             if (res.data && res.data.choices && res.data.choices[0].message && res.data.choices[0].message.content) {
               this.messages[aiMessageIndex].content = res.data.choices[0].message.content;
+              this.messages[aiMessageIndex].isComplete = true; // 标记消息已完成
               this.saveMessages();
               this.scrollToBottom();
             }
@@ -552,6 +561,7 @@ export default {
             // 处理错误情况
             this.messages[aiMessageIndex].isThinking = false;
             this.messages[aiMessageIndex].content = `API请求失败: ${err.errMsg}`;
+            this.messages[aiMessageIndex].isComplete = true; // 即使出错也标记完成
             this.saveMessages();
             this.scrollToBottom();
           }
@@ -576,7 +586,13 @@ export default {
           for (const line of lines) {
             if (line) {
               const parsedData = this.parseStream(line);
-              if (parsedData && parsedData.content) {
+              if (line.includes('[DONE]')) {
+                this.messages[aiMessageIndex].isComplete = true; // 标记消息已完成
+                this.saveMessages();
+                setTimeout(() => {
+                  this.scrollToBottom();
+                }, 0);
+              } else if (parsedData && parsedData.content) {
                 if (!this.messages[aiMessageIndex].content) {
                   this.messages[aiMessageIndex].content = '';
                 }
