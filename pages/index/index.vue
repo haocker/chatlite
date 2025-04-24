@@ -206,11 +206,9 @@
         </view>
       </view>
     </uni-drawer>
-  </view>
-
-  <!-- Agents Drawer -->
-  <uni-drawer ref="agentsDrawer" mode="left" :width="300" :mask-click="true">
-    <view class="drawer-content">
+      <!-- Agents Drawer -->
+  <uni-popup ref="agentsDrawer" type="left" :mask-click="true" :style="{zIndex:9999}">
+    <view class="drawer-content" style="width: 260px; height: 100vh;">
       <view :style="{height:statusBarHeight+'px'}">
         <!-- 这里是状态栏 -->
       </view>
@@ -241,11 +239,11 @@
         </view>
       </view>
     </view>
-  </uni-drawer>
+  </uni-popup>
 
   <!-- Add/Edit Agent Drawer -->
-  <uni-drawer ref="addAgentDrawer" mode="left" :width="300" :mask-click="true">
-    <view class="drawer-content">
+  <uni-popup ref="addAgentDrawer" type="left" :mask-click="true" :style="{zIndex:9999}">
+    <view class="drawer-content" style="width: 260px; height: 100vh;">
       <view :style="{height:statusBarHeight+'px'}">
         <!-- 这里是状态栏 -->
       </view>
@@ -260,12 +258,47 @@
         </view>
         <view class="form-group">
           <text>提示词</text>
-          <textarea v-model="newAgent.prompt" placeholder="输入提示词" :auto-height="true" :maxlength="-1" style="border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px; font-size: 1rem; min-height: 3em; max-height: 10em; width: 100%; box-sizing: border-box; overflow-y: auto;"></textarea>
+          <view class="prompt-label" @click="openFullScreenPromptEditor">
+            <text v-if="newAgent.prompt">{{ newAgent.prompt }}</text>
+            <text v-else class="placeholder-text">点击输入提示词...</text>
+          </view>
         </view>
         <button @click="saveAgent" class="save-button">保存</button>
       </view>
     </view>
-  </uni-drawer>
+  </uni-popup>
+  
+  <!-- Full Screen Prompt Editor -->
+  <uni-popup ref="fullScreenPromptEditor" type="center" :mask-click="false" :style="{zIndex:9999}">
+    <view class="full-screen-editor">
+      <view :style="{height:statusBarHeight+'px'}">
+        <!-- 这里是状态栏 -->
+      </view>
+      <view class="editor-header">
+        <view class="editor-title">编辑提示词</view>
+      </view>
+      <view class="editor-content">
+        <textarea
+          v-model="newAgent.prompt"
+          placeholder="输入提示词..."
+          :auto-height="true"
+          :show-confirm-bar="false"
+          :maxlength="-1"
+          :cursor-spacing="20"
+          :adjust-position="true"
+          :hold-keyboard="true"
+          class="chat-textarea full-screen-textarea"
+          style="height: calc(100vh - 120px); width: 100%;"
+        />
+      </view>
+      <view class="editor-footer">
+        <button @click="closeFullScreenPromptEditor" class="save-button large-close-button">完成</button>
+      </view>
+    </view>
+  </uni-popup>
+  </view>
+
+
 </template>
 
 <script>
@@ -471,6 +504,12 @@ export default {
       }
       this.saveAgents();
       this.closeAddAgentModal();
+    },
+    openFullScreenPromptEditor() {
+      this.$refs.fullScreenPromptEditor.open();
+    },
+    closeFullScreenPromptEditor() {
+      this.$refs.fullScreenPromptEditor.close();
     },
     removeAgent(agentId) {
       uni.showModal({
@@ -968,7 +1007,7 @@ export default {
             return { content: '' };
           }
           const data = JSON.parse(jsonStr);
-          if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+          if (data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content) {
             return { content: data.choices[0].delta.content };
           }
         }
@@ -1475,6 +1514,76 @@ export default {
   background-color: white;
   border-top: 1px solid #e2e8f0;
   padding: 10px 15px;
+}
+
+/* Prompt Label */
+.prompt-label {
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  padding: 10px;
+  min-height: 3em;
+  max-height: 10em;
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  cursor: pointer;
+  background-color: white;
+}
+
+.prompt-label .placeholder-text {
+  color: #999;
+}
+
+.prompt-label:hover {
+  background-color: #f9fafb;
+}
+
+/* Full Screen Editor */
+.full-screen-editor {
+  background-color: white;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 9999;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.editor-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.full-screen-textarea {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.editor-footer {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+}
+
+.large-close-button {
+  padding: 12px 24px;
+  font-size: 1.2rem;
+  min-width: 120px;
 }
 
 .model-selector text {
