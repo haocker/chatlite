@@ -62,6 +62,11 @@
         ></uni-icons>
       </view>
       <view class="input-container">
+        <view class="agent-button-container" v-if="!isFullscreen">
+          <button class="agent-button" @click="openAgentsDrawer">
+            <uni-icons type="staff" size="20" color="#666"></uni-icons>
+          </button>
+        </view>
         <view class="textarea-container">
           <textarea
             v-model="userInput"
@@ -71,7 +76,7 @@
             :maxlength="-1"
             :cursor-spacing="20"
             class="chat-textarea"
-            :style="{ 
+            :style="{
               maxHeight: isFullscreen ? 'calc(100vh - 180px)' : '84px',
               minHeight: '36px',
               height: 'auto',
@@ -80,10 +85,10 @@
             @confirm="sendMessage"
           />
         </view>
-        <button 
+        <button
           v-if="!isFullscreen"
-          :disabled="isSending" 
-          @click="sendMessage" 
+          :disabled="isSending"
+          @click="sendMessage"
           class="send-button"
         >
           <uni-icons type="paperplane" size="20" color="white"></uni-icons>
@@ -202,6 +207,65 @@
       </view>
     </uni-drawer>
   </view>
+
+  <!-- Agents Drawer -->
+  <uni-drawer ref="agentsDrawer" mode="left" :width="300" :mask-click="true">
+    <view class="drawer-content">
+      <view :style="{height:statusBarHeight+'px'}">
+        <!-- 这里是状态栏 -->
+      </view>
+      <view class="modal-header">
+        <view class="modal-title">智能体列表</view>
+        <view class="header-actions">
+          <uni-icons type="plus" size="24" color="#4a5568" @click="openAddAgentModal" style="margin-right: 10px;"></uni-icons>
+          <uni-icons type="close" size="24" color="#4a5568" @click="closeAgentsDrawer"></uni-icons>
+        </view>
+      </view>
+      <view class="settings-form">
+        <view class="form-group">
+          <uni-list>
+            <uni-list-item v-for="(agent, index) in agents" :key="index" :show-arrow="false">
+              <template v-slot:header>
+                <view class="agent-item" @click="selectAgent(agent.id)">
+                  <text :style="{ color: agent.id === currentAgentId ? '#3b82f6' : '#000' }">{{ agent.name }}</text>
+                </view>
+              </template>
+              <template v-slot:footer>
+                <view class="button-sp-area" v-if="agent.id !== 'default'">
+                  <uni-icons type="compose" size="20" color="#3b82f6" @click="editAgent(agent.id)" style="margin-right: 10px;"></uni-icons>
+                  <uni-icons type="trash" size="20" color="#ef4444" @click="removeAgent(agent.id)"></uni-icons>
+                </view>
+              </template>
+            </uni-list-item>
+          </uni-list>
+        </view>
+      </view>
+    </view>
+  </uni-drawer>
+
+  <!-- Add/Edit Agent Drawer -->
+  <uni-drawer ref="addAgentDrawer" mode="left" :width="300" :mask-click="true">
+    <view class="drawer-content">
+      <view :style="{height:statusBarHeight+'px'}">
+        <!-- 这里是状态栏 -->
+      </view>
+      <view class="modal-header">
+        <view class="modal-title">{{ editAgentMode ? '编辑智能体' : '新增智能体' }}</view>
+        <uni-icons type="close" size="24" color="#4a5568" @click="closeAddAgentModal"></uni-icons>
+      </view>
+      <view class="settings-form">
+        <view class="form-group">
+          <text>名称</text>
+          <input v-model="newAgent.name" placeholder="输入智能体名称" />
+        </view>
+        <view class="form-group">
+          <text>提示词</text>
+          <textarea v-model="newAgent.prompt" placeholder="输入提示词" :auto-height="true" :maxlength="-1" style="border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px; font-size: 1rem; min-height: 3em; max-height: 10em; width: 100%; box-sizing: border-box; overflow-y: auto;"></textarea>
+        </view>
+        <button @click="saveAgent" class="save-button">保存</button>
+      </view>
+    </view>
+  </uni-drawer>
 </template>
 
 <script>
@@ -233,8 +297,9 @@ export default {
       scrollTop: 0,
       isUserScrolling: false,
       defaultModels: [
-        { id: 'uuid-gpt-4o', modelId: 'gpt-4o', name: 'GPT-4o (OpenAI)', type: 'chat', apiUrl: '', apiKey: '', value: 'uuid-gpt-4o', label: 'GPT-4o (OpenAI)' },
-        { id: 'uuid-gpt-3.5-turbo', modelId: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (OpenAI)', type: 'chat', apiUrl: '', apiKey: '', value: 'uuid-gpt-3.5-turbo', label: 'GPT-3.5 Turbo (OpenAI)' }
+        { id: 'uuid-deepseek', modelId: 'deepseek', name: 'Deepseek (免费)', type: 'chat', apiUrl: '', apiKey: 'null'},
+        { id: 'uuid-gemini', modelId: 'gemini', name: 'Gemini (免费)', type: 'chat', apiUrl: '', apiKey: 'null'},
+        { id: 'uuid-gpt-4o', modelId: 'openai-large', name: 'GPT-4o (免费)', type: 'chat', apiUrl: '', apiKey: 'null'},
       ],
       modelTypeOptions: [
         { value: 'chat', text: '聊天' },
@@ -244,7 +309,15 @@ export default {
       isFullscreen: false,
       previousHeight: null,
       conversations: [],
-      currentConversationId: null
+      currentConversationId: null,
+      agents: [],
+      currentAgentId: 'default',
+      newAgent: {
+        id: '',
+        name: '',
+        prompt: ''
+      },
+      editAgentMode: false
     };
   },
   computed: {
@@ -310,6 +383,7 @@ export default {
       }
       this.currentConversationId = uni.getStorageSync('aiChatCurrentConversation') || this.conversations[0]?.id;
       this.loadMessages();
+      this.loadAgents();
     },
     loadMessages() {
       if (this.currentConversationId) {
@@ -335,6 +409,84 @@ export default {
     },
     closeConversations() {
       this.$refs.conversationsDrawer.close();
+    },
+    loadAgents() {
+      const savedAgents = uni.getStorageSync('aiChatAgents');
+      this.agents = savedAgents ? JSON.parse(savedAgents) : [
+        {
+          id: 'default',
+          name: '默认智能体',
+          prompt: '你是一个AI助手，尽力帮助用户解决问题。'
+        }
+      ];
+      this.currentAgentId = uni.getStorageSync('aiChatCurrentAgent') || 'default';
+    },
+    saveAgents() {
+      uni.setStorageSync('aiChatAgents', JSON.stringify(this.agents));
+    },
+    openAgentsDrawer() {
+      this.$refs.agentsDrawer.open();
+    },
+    closeAgentsDrawer() {
+      this.$refs.agentsDrawer.close();
+    },
+    selectAgent(agentId) {
+      this.currentAgentId = agentId;
+      uni.setStorageSync('aiChatCurrentAgent', agentId);
+      this.closeAgentsDrawer();
+    },
+    openAddAgentModal() {
+      this.editAgentMode = false;
+      this.newAgent = { id: '', name: '', prompt: '' };
+      this.$refs.addAgentDrawer.open();
+    },
+    closeAddAgentModal() {
+      this.$refs.addAgentDrawer.close();
+    },
+    editAgent(agentId) {
+      const agent = this.agents.find(a => a.id === agentId);
+      if (agent) {
+        this.editAgentMode = true;
+        this.newAgent = { ...agent };
+        this.$refs.addAgentDrawer.open();
+      }
+    },
+    saveAgent() {
+      if (!this.newAgent.name) {
+        uni.showToast({ title: '请输入智能体名称', icon: 'none' });
+        return;
+      }
+      
+      if (this.editAgentMode) {
+        const index = this.agents.findIndex(a => a.id === this.newAgent.id);
+        if (index !== -1) {
+          this.agents[index] = { ...this.newAgent };
+        } else {
+          this.newAgent.id = this.generateUniqueId();
+          this.agents.push({ ...this.newAgent });
+        }
+      } else {
+        this.newAgent.id = this.generateUniqueId();
+        this.agents.push({ ...this.newAgent });
+      }
+      this.saveAgents();
+      this.closeAddAgentModal();
+    },
+    removeAgent(agentId) {
+      uni.showModal({
+        title: '确认',
+        content: '确定要删除此智能体吗？',
+        success: (res) => {
+          if (res.confirm) {
+            this.agents = this.agents.filter(a => a.id !== agentId);
+            if (this.currentAgentId === agentId) {
+              this.currentAgentId = 'default';
+              uni.setStorageSync('aiChatCurrentAgent', this.currentAgentId);
+            }
+            this.saveAgents();
+          }
+        }
+      });
     },
     addNewConversation() {
       uni.showModal({
@@ -431,10 +583,7 @@ export default {
           this.models.push({ ...this.newModel });
         }
       } else {
-        if (this.models.some(m => m.modelId === this.newModel.modelId && m.id !== this.newModel.id)) {
-          uni.showToast({ title: '该模型ID已存在', icon: 'none' });
-          return;
-        }
+        // 允许模型ID重复
         this.newModel.id = this.generateUniqueId();
         this.models.push({ ...this.newModel });
       }
@@ -517,7 +666,7 @@ export default {
       }
     },
     async callChatApi(userMessage, model) {
-      const apiUrl = model.apiUrl || 'https://api.openai.com/v1/chat/completions';
+      const apiUrl = model.apiUrl || 'https://text.pollinations.ai/openai';
       const apiKey = model.apiKey;
       const messages = this.getChatContext(userMessage);
       
@@ -532,17 +681,20 @@ export default {
           temperature: 1.0,
           stream: true
         };
-        
+        let headers = {
+            'Content-Type': 'application/json',
+            'Accept': "text/event-stream"
+          };
+          if(apiKey!='null'){
+            headers['Authorization'] =  `Bearer ${apiKey}`;
+          }
         // Use conditional compilation for platform-specific streaming methods
         // #ifdef MP-WEIXIN || MP-QQ || MP-BAIDU || MP-ALIPAY || MP-TOUTIAO
         // Use uni.request for streaming on mini-programs
         const requestTask = uni.request({
           url: apiUrl,
           method: 'POST',
-          header: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
+          header: headers,
           data: contentData,
           dataType: 'json',
           responseType: 'text',
@@ -613,10 +765,7 @@ export default {
         // Use fetch for streaming on other platforms (H5, App)
         fetch(apiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
+          headers: headers,
           body: JSON.stringify(contentData)
         }).then(response => {
           if (!response.ok) {
@@ -745,6 +894,13 @@ export default {
     },
     getChatContext(currentMessage) {
       const contextMessages = [];
+      const currentAgent = this.agents.find(a => a.id === this.currentAgentId);
+      if (currentAgent) {
+        contextMessages.push({
+          role: 'system',
+          content: currentAgent.prompt
+        });
+      }
       let count = 0;
       for (let i = this.messages.length - 1; i >= 0 && count < 5; i--) {
         const msg = this.messages[i];
@@ -968,6 +1124,46 @@ export default {
   gap: 8px;
   align-items: flex-end;
   width: 100%;
+}
+
+.agent-button-container {
+  display: flex;
+  align-items: center;
+}
+
+.agent-button {
+  height: 36px;
+  width: 36px;
+  min-width: 36px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  color: #666;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  box-shadow: none;
+  outline: none;
+}
+
+.agent-button::after {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.agent-button:hover {
+  background-color: #e5e7eb;
+  transform: scale(1.05);
+}
+
+.agent-button:active {
+  transform: scale(0.95);
 }
 
 .textarea-container {
@@ -1258,14 +1454,14 @@ export default {
   margin-top: 10px;
 }
 
-.conversation-item {
+.conversation-item, .agent-item {
   display: flex;
   align-items: center;
   cursor: pointer;
   width: 100%;
 }
 
-.conversation-item text {
+.conversation-item text, .agent-item text {
   flex: 1;
 }
 
